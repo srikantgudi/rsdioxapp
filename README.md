@@ -28,9 +28,7 @@ dx serve
 
 ### Quick Demo
 
-```
-Demo: [Calendar](http://localhost:8090/calendar)
-```
+[Calendar](http://localhost:8090/calendar)
 
 ### Automatic Tailwind (Dioxus 0.7+)
 
