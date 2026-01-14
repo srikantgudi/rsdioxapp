@@ -18,6 +18,20 @@ project/
 ├─ Cargo.toml # The Cargo.toml file defines the dependencies and feature flags for your project
 ```
 
+## Quick Start
+
+```
+git clone [your-repo]
+cd rsdioxapp
+dx serve
+```
+
+### Quick Demo
+
+```
+Demo: Calendar ← Add live link
+```
+
 ### Automatic Tailwind (Dioxus 0.7+)
 
 As of Dioxus 0.7, there no longer is a need to manually install tailwind. Simply `dx serve` and you're good to go!
