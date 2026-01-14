@@ -2,8 +2,7 @@ use std::string;
 
 use dioxus::{html::g::mask_content_units, prelude::*};
 use chrono_tz::Tz;
-use chrono::{DateTime, Datelike, Months, NaiveDate, Timelike, Utc};
-use std::collections::HashMap;
+use chrono::*;
 
 #[derive(Debug, Clone, Routable, PartialEq)]
 #[rustfmt::skip]
@@ -55,7 +54,6 @@ fn App() -> Element {
 fn Home() -> Element {
     rsx! {
         div {
-            class: "text-center",
             h2 {
                 class:"text-3xl mb-6",
                 "Home"
@@ -123,7 +121,7 @@ pub fn Counter() -> Element {
 fn Navbar() -> Element {
     rsx! {
         div {
-            class: "mb-4 flex items-center gap-1",
+            class: "mb-4 flex items-center justify-center gap-1",
             div {class:"text-4xl  mr-12", "Sample Dioxus App"}
             Link {
                 to: Route::Home {},
@@ -157,123 +155,118 @@ struct Monthcal {
     yr: i32
 }
 
-impl Monthcal {
-    fn new(y:i32,m: u32) -> Self {
-        Self { yr: y, mo: m }
-    }
-    fn startweekday(&self) -> u32 {
-        NaiveDate::from_ymd_opt(self.yr, self.mo, 1)
-        .unwrap_or_else(|| NaiveDate::from_ymd_opt(2026, 1, 1).unwrap())
-        .weekday()
-        .num_days_from_sunday() as u32
-    }
-    
-    fn lastday(&self) -> u32 {
-        let next_yr = self.yr + (self.mo == 12) as i32;
-        let next_mo = if self.mo == 12 { 1 } else { self.mo + 1 };
-        NaiveDate::from_ymd_opt(next_yr, next_mo, 1)
-            .unwrap_or_else(|| NaiveDate::from_ymd_opt(2026, 1, 1).unwrap())
-            .pred_opt()
-            .unwrap()
-            .day()
-    }
-    
-    fn cgrid(&self) -> Vec<String> {
-        let first_weekday = self.startweekday();
-        let mut grid = vec!["*".to_string()];
-        grid.extend((1..first_weekday).map(|_| format!("*")));
-        grid.extend((1..=self.lastday()).map(|d| format!("{:2}", d)));
-        grid.resize(42, "*".to_string());
-
-        grid
-    }
-}
-
 #[component]
 fn Calendar() -> Element {
     let months = ["Jan","Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     let weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    let mut curmo = use_signal(|| 0u32);
-    let mut curyr = use_signal(|| 2026i32);
-    // let dt = use_signal(||Monthcal::new(*curyr.read(), *curmo.read()));
-    let dt = use_memo({
-        let curmo = curmo.clone();
-        let curyr = curyr.clone();
-        move || Monthcal::new(*curyr.read(), *curmo.read())
+    let mut cyear = use_signal(|| 2026i32);
+    let mut cmonth = use_signal(|| 0u32);
+    let mut days = ["";32];
+
+    let lastday = use_memo(move || {
+        let next_month = if cmonth() == 11 { 1 } else { cmonth() + 1 };
+        let next_year = if cmonth() == 11 { cyear() + 1 } else { cyear() };
+        
+        chrono::NaiveDate::from_ymd_opt(next_year, next_month + 1, 1)
+            .and_then(|n| n.checked_sub_days(Days::new(1)))
+            .map_or(31, |d| d.day())
     });
-    let grid = use_memo(move || dt.read().cgrid());
+
+    let startweekday = use_memo(move || {
+        let first_day = NaiveDate::from_ymd_opt(cyear(), (cmonth()+1) as u32, 1)
+            .expect("valid first day");
+        first_day.weekday().num_days_from_sunday()  // 0=Sun, 6=Sat
+    });
+
     let curmonth = use_memo(move || {
-        let month_num = *curmo.read();
-        months.get((month_num as usize).saturating_sub(1)).unwrap_or(&"??").to_string()
+        months[cmonth() as usize]
     });
 
-    rsx! {
-        div {
-            h1 { 
-                class: "text-3xl my-4", 
-                div {
-                    class:"flex mr-24 p-1 px-2",
-                    span {
-                        class:"mr-12",
-                        "Calendar :: {curmonth.read()} {*curyr.read()}"
-                    },
-                    nav {
-                        button {class:"bg-blue-400 mx-2 p-1 px-2 rounded-sm",
-                            onclick: move |_| {
-                                curyr.set(curyr() - 10)
-                            },
-                            "|<" 
-                        }
-                        button {class:"bg-blue-400 mx-2 p-1 px-2 rounded-sm",
-                            onclick: move |_| {
-                                curyr.set(curyr() - 1)
-                            },
-                            "<" 
-                        }
-
-                        button {class:"bg-blue-400 mx-2 p-1 px-2 rounded-sm",
-                            onclick: move |_| {
-                                curyr.set(curyr() + 1)
-                            },
-                            ">"
-                        }
-                        button {class:"bg-blue-400 mx-2 p-1 px-2 rounded-sm",
-                            onclick: move |_| {
-                                curyr.set(curyr() + 10)
-                            },
-                            ">|" 
-                        }
-                    }
-                }
-            }
+    let monthgrid = use_memo(move || -> Element {
+        rsx! {
             div {
-                class: "grid grid-cols-12 gap-2",
-                for (i, m) in months.iter().enumerate() {
+                class: "grid grid-cols-12 gap-[0.05rem]",
+                for (i,m) in months.iter().enumerate() {
                     button {
-                        class: "bg-blue-600 text-white cursor-pointer rounded-sm py-2",
-                        onclick: move |_| {
-                            curmo.set((i+1) as u32);
-                        },
+                        onclick: move |_| {cmonth.set(i as u32)},
+                        class: "bg-blue-300 text-gray-700 text-center rounded-sm cursor-pointer p-2 px-2",
                         "{m}"
                     }
                 }
             }
+        }
+    });
+
+    let weekgrid = use_memo(move || -> Element {
+        rsx! {
             div {
-                class: "my-2 grid grid-cols-7 gap-2",
-                for w in weekdays {
+                class: "my-1 grid grid-cols-7 gap-[0.125rem]",
+                for m in weekdays.iter() {
                     span {
-                        class:"bg-blue-400 p-2 text-center",
-                        {w.to_string()}
+                        class: "bg-gray-600 text-gray-200 text-center rounded-sm cursor-pointer p-2 px-2",
+                        "{m}"
                     }
                 }
             }
+        }
+    });
+
+    let yearnav = use_memo(move || -> Element {
+        rsx ! {
+            span {
+                class:"flex items-center gap-[0.125rem]",
+                button {
+                    onclick:move |_| cyear -= 10, class:"bg-blue-200 text-gray-800 cursor-pointer p-1 px-2 w-20 rounded-sm", "|<" 
+                }
+                button {
+                    onclick:move |_| cyear -= 1, class:"bg-blue-200 text-gray-800 cursor-pointer p-1 px-2 w-20 rounded-sm", "<" 
+                }
+                button {
+                    onclick:move |_| cyear += 1, class:"bg-blue-200 text-gray-800 cursor-pointer p-1 px-2 w-20 rounded-sm", ">" 
+                }
+                button {
+                    onclick:move |_| cyear += 10, class:"bg-blue-200 text-gray-800 cursor-pointer p-1 px-2 w-20 rounded-sm", ">|" 
+                }
+            }
+        }
+    });
+
+    rsx! {
+        div {
+            h1 {
+                class:"flex gap-2 items-center text-2xl mb-4", 
+                div {
+                    class:"mr-12 text-4xl font-bold",
+                    "Calendar",
+                }
+                div {
+                    class: "text-3xl",
+                    " {curmonth} {cyear} "
+                }
+                { yearnav }
+                button {
+                    onclick: move |_| {
+                        let today = chrono::Utc::now().naive_utc();
+                        cyear.set(today.year());
+                        cmonth.set((today.month() - 1) as u32);
+                    },
+                    class: "bg-blue-600 text-gray-200 cursor-pointer p-1 px-3 w-auto rounded-sm",
+                    "TODAY"
+                }
+            }
             div {
-                class: "grid grid-cols-7 gap-1",
-                for d in grid.read().clone() {
-                    span {
-                        class: "bg-gray-600 text-center w-full py-4",
-                        "{d}"
-                    }
+                {monthgrid}
+            }
+            div {
+                {weekgrid}
+            }
+            div {
+                class: "grid grid-cols-7 gap-[0.125rem]",
+                for _ in 0..startweekday() {
+                    span {class:"bg-gray-400 text-center py-2", "*"}
+                }
+                for d in 1..=lastday() {
+                    span {class:"bg-blue-300 text-blue-800 text-2xl py-2 text-center", "{d}"}
                 }
             }
         }
@@ -433,7 +426,7 @@ fn ZoneTimes() -> Element {
                 }
                 // Live display (your converter pattern)
                 div {
-                    class: "col-span-2 text-4xl font-mono p-4 bg-gray-100 text-blue-700 rounded-lg", 
+                    class: "col-span-2 text-4xl font-mono p-4 bg-gray-100 text-blue-700 w-180 rounded-lg", 
                     "{zone_display()}",
                     AnalogClock {time: time(), zone_name: zone().name()}
                 }
